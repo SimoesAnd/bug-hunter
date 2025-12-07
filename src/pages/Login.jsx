@@ -6,44 +6,75 @@ export default function Login() {
   const { loginGoogle, loginEmail, registerEmail, resetPassword } = useAuth();
   
   const [mode, setMode] = useState("login");
-  const [theme, setTheme] = useState("dark");
+  
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("theme") || "dark";
+    }
+    return "dark";
+  });
+
   const [message, setMessage] = useState("");
   const [errors, setErrors] = useState({});
 
-  // Estados do Formulário
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [pass2, setPass2] = useState("");
 
-  // Lógica de Tema
   useEffect(() => {
-    const saved = localStorage.getItem("theme") || "dark";
-    setTheme(saved);
-    document.documentElement.className = saved;
-  }, []);
+    document.documentElement.className = theme;
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.className = newTheme;
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
-  // Validação
+  // tradutor de erros mostrado na tela login
+  const getFriendlyError = (error) => {
+    console.error("Erro original:", error.code);
+    
+    switch (error.code) {
+      case "auth/invalid-credential":
+      case "auth/user-not-found":
+      case "auth/wrong-password":
+        return "E-mail ou senha incorretos.";
+      case "auth/email-already-in-use":
+        return "Este e-mail já está sendo usado por outra conta.";
+      case "auth/weak-password":
+        return "A senha é muito fraca. Escolha uma mais forte.";
+      case "auth/invalid-email":
+        return "O formato do e-mail é inválido.";
+      case "auth/too-many-requests":
+        return "Muitas tentativas. Tente novamente mais tarde.";
+      case "auth/network-request-failed":
+        return "Erro de conexão. Verifique sua internet.";
+      case "auth/popup-closed-by-user":
+        return "O login com Google foi cancelado.";
+      default:
+        return "Ocorreu um erro inesperado. Tente novamente.";
+    }
+  };
+
   const validate = () => {
     const newErrors = {};
-    if (!email.includes("@")) newErrors.email = "Email inválido";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!email) newErrors.email = "O e-mail é obrigatório.";
+    else if (!emailRegex.test(email)) newErrors.email = "Digite um e-mail válido.";
+
     if (pass.length < 6) newErrors.pass = "Mínimo 6 caracteres";
+    
     if (mode === "register") {
-      if (!name) newErrors.name = "Nome é obrigatório";
+      if (!name.trim()) newErrors.name = "Nome é obrigatório";
       if (pass !== pass2) newErrors.pass2 = "Senhas não conferem";
     }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  // Handlers
   async function handleSubmit() {
     setMessage("");
     if (!validate()) return;
@@ -55,10 +86,11 @@ export default function Login() {
         await registerEmail(name, email, pass);
       } else if (mode === "forgot") {
         await resetPassword(email);
-        setMessage("Email de recuperação enviado!");
+        setMessage("✅ E-mail de recuperação enviado! Verifique sua caixa de entrada.");
+        return; // Retorna para não cair no catch nem limpar a mensagem de sucesso
       }
     } catch (err) {
-      setMessage("Erro: " + err.message);
+      setMessage(getFriendlyError(err));
     }
   }
 
@@ -66,17 +98,14 @@ export default function Login() {
     try {
       await loginGoogle();
     } catch (err) {
-      setMessage("Erro Google: " + err.message);
+      setMessage(getFriendlyError(err));
     }
   }
 
   return (
     <div className={`min-h-screen flex items-center justify-center p-4 sm:p-6 transition-colors duration-300 ${theme === "dark" ? "bg-[#0a0a0a]" : "bg-gray-200"}`}>
-      
-      {/* CARD RESPONSIVO */}
       <div className={`w-full max-w-md p-6 sm:p-8 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all ${theme === "dark" ? "bg-white/5 border-white/10" : "bg-white border-gray-300"}`}>
         
-        {/* Header */}
         <div className="flex justify-between items-center mb-6 sm:mb-8">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="p-2 bg-red-500/20 rounded-lg">
@@ -91,24 +120,23 @@ export default function Login() {
           </button>
         </div>
 
-        {/* Mensagens de Erro/Sucesso */}
+        {/* Mensagem de Erro/Sucesso Estilizada */}
         {message && (
-          <div className={`mb-4 p-3 rounded text-sm text-center animate-pulse border ${
-            message.includes("Erro") 
-              ? "bg-red-500/10 border-red-500/30 text-red-400" 
-              : "bg-green-500/10 border-green-500/30 text-green-400"
+          <div className={`mb-4 p-3 rounded text-sm text-center animate-pulse border font-medium ${
+            message.includes("✅") 
+              ? "bg-green-500/10 border-green-500/30 text-green-400" 
+              : "bg-red-500/10 border-red-500/30 text-red-400"
           }`}>
             {message}
           </div>
         )}
 
-        {/* Abas de Navegação (Login/Registro) */}
         {mode !== "forgot" && (
           <div className="flex mb-6 p-1 bg-white/5 rounded-lg border border-white/10">
             {["login", "register"].map((m) => (
               <button 
                 key={m} 
-                onClick={() => setMode(m)} 
+                onClick={() => { setMode(m); setMessage(""); setErrors({}); }} 
                 className={`flex-1 py-2 text-sm sm:text-base rounded font-semibold capitalize transition-all duration-200 ${
                   mode === m 
                     ? "bg-red-600 text-white shadow-md" 
@@ -121,7 +149,6 @@ export default function Login() {
           </div>
         )}
 
-        {/* Formulários */}
         <div className="space-y-4">
           {mode === "register" && (
             <Input icon={User} placeholder="Nome Completo" val={name} set={setName} error={errors.name} theme={theme} />
@@ -137,15 +164,13 @@ export default function Login() {
              <Input icon={Lock} type="password" placeholder="Confirme a Senha" val={pass2} set={setPass2} error={errors.pass2} theme={theme} />
           )}
 
-          {/* Botão Principal */}
           <button 
             onClick={handleSubmit} 
             className="w-full bg-red-600 hover:bg-red-500 py-3 sm:py-3.5 rounded-lg text-white font-bold shadow-lg transition active:scale-[0.98] flex justify-center items-center gap-2 text-sm sm:text-base"
           >
-             {mode === "login" ? <><LogIn size={18}/> Acessar Plataforma</> : mode === "register" ? "Cadastrar-se" : "Enviar Link de Recuperação"}
+             {mode === "login" ? <><LogIn size={18}/> Acessar Plataforma</> : mode === "register" ? "Cadastrar-se" : "Enviar Link"}
           </button>
 
-          {/* Botão Google e Links Auxiliares */}
           {mode === "login" && (
             <>
               <div className="relative flex py-2 items-center">
@@ -164,7 +189,7 @@ export default function Login() {
               
               <p 
                 className="text-center text-sm text-gray-400 cursor-pointer hover:text-white mt-2 transition underline decoration-transparent hover:decoration-white" 
-                onClick={() => setMode("forgot")}
+                onClick={() => { setMode("forgot"); setMessage(""); setErrors({}); }}
               >
                 Esqueceu sua senha?
               </p>
@@ -174,7 +199,7 @@ export default function Login() {
           {mode === "forgot" && (
              <p 
                className="text-center text-sm text-gray-400 cursor-pointer hover:text-white mt-4 transition" 
-               onClick={() => setMode("login")}
+               onClick={() => { setMode("login"); setMessage(""); setErrors({}); }}
              >
                &larr; Voltar para o login
              </p>
@@ -185,7 +210,6 @@ export default function Login() {
   );
 }
 
-// Componente de Input Reutilizável e Responsivo
 function Input({ icon: Icon, theme, error, val, set, ...props }) {
   return (
     <div className="relative group">
